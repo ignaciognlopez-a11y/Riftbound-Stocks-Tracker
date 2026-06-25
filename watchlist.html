@@ -167,12 +167,44 @@
     .filter-btn:hover { color:var(--text); border-color:var(--text-muted); }
     .filter-btn.active { background:#e8681a; border-color:#e8681a; color:#fff; }
 
+    /* ── VISTA TOGGLE ── */
+    .view-toggle { display: flex; gap: 2px; margin-left: 8px; }
+    .view-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 13px; transition: all 0.15s; }
+    .view-btn:hover { color: var(--text); border-color: var(--text-muted); }
+    .view-btn.active { background: var(--surface2); color: var(--text); border-color: var(--text-muted); }
+
+    /* ── LIST VIEW ── */
+    .list-view { display: flex; flex-direction: column; gap: 4px; }
+    .list-row {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 14px; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .list-row:hover { border-color: var(--gold-dim); background: var(--surface2); }
+    .list-row.dragging { opacity: 0.4; }
+    .list-row.drag-over { border-color: #e8681a; }
+    .list-rank { font-size: 11px; font-weight: 700; color: var(--text-muted); width: 20px; text-align: center; flex-shrink: 0; }
+    .list-img { width: 36px; height: 36px; border-radius: 5px; object-fit: cover; object-position: top; flex-shrink: 0; }
+    .list-name { font-size: 13px; font-weight: 700; color: var(--text); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .list-set { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+    .list-sales { font-size: 10px; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
+    .list-price { font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 800; color: var(--text); flex-shrink: 0; white-space: nowrap; letter-spacing: -0.3px; }
+    .list-var { font-size: 11px; font-weight: 700; flex-shrink: 0; white-space: nowrap; min-width: 56px; text-align: right; }
+    .list-var.pos { color: var(--green); }
+    .list-var.neg { color: var(--red); }
+    .list-var.neu { color: var(--text-muted); }
+    .list-buy { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 5px; background: var(--green); color: #000; flex-shrink: 0; text-decoration: none; }
+    .list-buy:hover { opacity: 0.85; }
+
     /* Drag & drop */
     .wl-card { transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s, opacity 0.15s; }
     .wl-card.dragging { opacity: 0.4; transform: scale(0.97); box-shadow: none !important; }
     .wl-card.drag-over { border-color: #e8681a; box-shadow: 0 0 0 2px rgba(232,104,26,0.3); }
     .drag-mode .wl-card { cursor: grab; }
     .drag-mode .wl-card:active { cursor: grabbing; }
+    .drag-mode .list-row { cursor: grab; }
+    .drag-mode .list-row:active { cursor: grabbing; }
     .drag-hint { font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; margin-left: 8px; opacity: 0; transition: opacity 0.2s; }
     .drag-hint.visible { opacity: 1; }
     @media (max-width: 1100px) { .card-grid { grid-template-columns: repeat(4,1fr); } }
@@ -411,10 +443,30 @@
     </div>`;
   }
 
+  function buildListRow(item, rank) {
+    const v7 = varFromHistory(item.priceHistory, 7);
+    const varCls = !v7 ? 'neu' : v7.pct >= 0 ? 'pos' : 'neg';
+    const varTxt = !v7 ? '—' : (v7.pct >= 0 ? '+' : '') + v7.pct.toFixed(1) + '% 7d';
+    const url = item.cardmarketUrl || '#';
+    const lastSale = item.usSales && item.usSales.length ? item.usSales[item.usSales.length-1] : null;
+    const salesTxt = lastSale ? lastSale.platform + ' $' + lastSale.price : '';
+    const img = item.image || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2236%22 height=%2236%22%3E%3Crect fill=%22%23111%22 width=%2236%22 height=%2236%22/%3E%3C/svg%3E';
+    return '<div class="list-row" data-id="' + item.id + '" draggable="false">'
+      + '<span class="list-rank">' + rank + '</span>'
+      + '<img class="list-img" src="' + img + '" alt="' + item.name + '" onerror="this.style.opacity='0.2'"/>'
+      + '<div style="flex:1;min-width:0"><div class="list-name">' + item.name + '</div>'
+      + '<div class="list-set">' + (item.set||'unknown') + (item.condition==='Sealed'?' · Sealed':'') + '</div></div>'
+      + (salesTxt ? '<span class="list-sales">' + salesTxt + '</span>' : '')
+      + '<span class="list-price">' + fmt(item.currentPrice) + '</span>'
+      + '<span class="list-var ' + varCls + '">' + varTxt + '</span>'
+      + '<a class="list-buy" href="' + url + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">Buy</a>'
+      + '</div>';
+  }
+
   function render() {
-    if (!window.portfolioData?.cards) return;
+    if (!window.portfolioData || !window.portfolioData.cards) return;
     const cards = window.portfolioData.cards;
-    const wl = cards.filter(c => c.status === 'Watchlist');
+    const wl = cards.filter(function(c){ return c.status === 'Watchlist'; });
 
     const upd = window.portfolioData.updatedAt;
     if (upd) document.getElementById('updated-label').textContent =
@@ -423,135 +475,122 @@
     const main = document.getElementById('main-content');
 
     if (!wl.length) {
-      main.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">👁</div>
-          <div class="empty-title">No items on your watchlist yet</div>
-          <div class="empty-sub">Set Status = Watchlist in Notion to start tracking items here.</div>
-        </div>`;
+      main.innerHTML = '<div class="empty-state"><div class="empty-icon">👁</div><div class="empty-title">Watchlist vacía</div></div>';
       return;
     }
 
     let currentSort = 'value';
+    let currentView = 'grid';
 
-    // Cargar orden custom guardado
-    const STORAGE_KEY = 'wl-custom-order';
-    function loadCustomOrder() {
-      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch { return null; }
-    }
-    function saveCustomOrder(ids) {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(ids)); } catch {}
-    }
+    var STORAGE_KEY = 'wl-custom-order';
+    function loadCustomOrder() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||'null'); } catch(e){ return null; } }
+    function saveCustomOrder(ids) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(ids)); } catch(e){} }
 
     function sortWL(items, mode) {
       if (mode === 'custom') {
-        const saved = loadCustomOrder();
-        if (!saved) return [...items].sort((a,b) => a.currentPrice - b.currentPrice);
-        const idx = Object.fromEntries(saved.map((id,i) => [id,i]));
-        return [...items].sort((a,b) => (idx[a.id] ?? 999) - (idx[b.id] ?? 999));
+        var saved = loadCustomOrder();
+        if (!saved) return items.slice().sort(function(a,b){ return a.currentPrice-b.currentPrice; });
+        var idx = {}; saved.forEach(function(id,i){ idx[id]=i; });
+        return items.slice().sort(function(a,b){ return (idx[a.id]!=null?idx[a.id]:999)-(idx[b.id]!=null?idx[b.id]:999); });
       }
       if (mode === 'gainers') {
-        return [...items].sort((a,b) => {
-          const pA = a.priceHistory?.length > 1 ? (a.priceHistory[a.priceHistory.length-1].price - a.priceHistory[0].price)/a.priceHistory[0].price : -Infinity;
-          const pB = b.priceHistory?.length > 1 ? (b.priceHistory[b.priceHistory.length-1].price - b.priceHistory[0].price)/b.priceHistory[0].price : -Infinity;
-          return pB - pA;
+        return items.slice().sort(function(a,b) {
+          var pA = a.priceHistory && a.priceHistory.length>1 ? (a.priceHistory[a.priceHistory.length-1].price-a.priceHistory[0].price)/a.priceHistory[0].price : -Infinity;
+          var pB = b.priceHistory && b.priceHistory.length>1 ? (b.priceHistory[b.priceHistory.length-1].price-b.priceHistory[0].price)/b.priceHistory[0].price : -Infinity;
+          return pB-pA;
         });
       }
-      return [...items].sort((a,b) => a.currentPrice - b.currentPrice);
+      return items.slice().sort(function(a,b){ return a.currentPrice-b.currentPrice; });
     }
 
-    function attachCardListeners(grid, items) {
-      grid.querySelectorAll('.wl-card').forEach(el => {
-        el.addEventListener('click', () => {
-          if (el.classList.contains('dragging')) return;
-          const item = cards.find(c => c.id === el.dataset.id);
-          if (item) openModal(item);
-        });
+    function addDragGrid(grid) {
+      var dragEl = null;
+      grid.querySelectorAll('.wl-card').forEach(function(card) {
+        card.setAttribute('draggable','true');
+        card.addEventListener('dragstart',function(e){ dragEl=card; card.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
+        card.addEventListener('dragend',function(){ card.classList.remove('dragging'); grid.querySelectorAll('.wl-card').forEach(function(c){c.classList.remove('drag-over');}); saveCustomOrder(Array.from(grid.querySelectorAll('.wl-card')).map(function(c){return c.dataset.id;})); });
+        card.addEventListener('dragover',function(e){ e.preventDefault(); if(!dragEl||dragEl===card)return; card.classList.add('drag-over'); var r=card.getBoundingClientRect(); e.clientX<r.left+r.width/2?grid.insertBefore(dragEl,card):grid.insertBefore(dragEl,card.nextSibling); });
+        card.addEventListener('dragleave',function(){ card.classList.remove('drag-over'); });
+        card.addEventListener('drop',function(e){ e.preventDefault(); card.classList.remove('drag-over'); });
       });
     }
 
-    function attachDragListeners(grid) {
-      let dragEl = null;
-      let dragOverEl = null;
-
-      grid.querySelectorAll('.wl-card').forEach(card => {
-        card.setAttribute('draggable', 'true');
-
-        card.addEventListener('dragstart', e => {
-          dragEl = card;
-          card.classList.add('dragging');
-          e.dataTransfer.effectAllowed = 'move';
-        });
-
-        card.addEventListener('dragend', () => {
-          card.classList.remove('dragging');
-          grid.querySelectorAll('.wl-card').forEach(c => c.classList.remove('drag-over'));
-          // Guardar nuevo orden
-          const ids = [...grid.querySelectorAll('.wl-card')].map(c => c.dataset.id);
-          saveCustomOrder(ids);
-          dragEl = null;
-        });
-
-        card.addEventListener('dragover', e => {
-          e.preventDefault();
-          if (!dragEl || dragEl === card) return;
-          card.classList.add('drag-over');
-          // Insertar antes o después según posición del ratón
-          const rect = card.getBoundingClientRect();
-          const midX = rect.left + rect.width / 2;
-          if (e.clientX < midX) {
-            grid.insertBefore(dragEl, card);
-          } else {
-            grid.insertBefore(dragEl, card.nextSibling);
-          }
-        });
-
-        card.addEventListener('dragleave', () => {
-          card.classList.remove('drag-over');
-        });
-
-        card.addEventListener('drop', e => {
-          e.preventDefault();
-          card.classList.remove('drag-over');
-        });
+    function addDragList(container) {
+      var dragEl = null;
+      container.querySelectorAll('.list-row').forEach(function(row) {
+        row.setAttribute('draggable','true');
+        row.addEventListener('dragstart',function(e){ dragEl=row; row.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
+        row.addEventListener('dragend',function(){ row.classList.remove('dragging'); container.querySelectorAll('.list-row').forEach(function(r){r.classList.remove('drag-over');}); saveCustomOrder(Array.from(container.querySelectorAll('.list-row')).map(function(r){return r.dataset.id;})); container.querySelectorAll('.list-rank').forEach(function(el,i){el.textContent=i+1;}); });
+        row.addEventListener('dragover',function(e){ e.preventDefault(); if(!dragEl||dragEl===row)return; row.classList.add('drag-over'); var r=row.getBoundingClientRect(); e.clientY<r.top+r.height/2?container.insertBefore(dragEl,row):container.insertBefore(dragEl,row.nextSibling); });
+        row.addEventListener('dragleave',function(){ row.classList.remove('drag-over'); });
+        row.addEventListener('drop',function(e){ e.preventDefault(); row.classList.remove('drag-over'); });
       });
     }
 
-    function renderWLGrid(items, sort) {
-      const grid = document.getElementById('wl-grid');
-      const hint = document.getElementById('drag-hint');
-      const sorted = sortWL(items, sort);
-      grid.innerHTML = sorted.map(buildCard).join('');
-
-      const isDrag = sort === 'custom';
-      grid.classList.toggle('drag-mode', isDrag);
+    function renderWLGrid(items, sort, view) {
+      var sorted = sortWL(items, sort);
+      var isDrag = sort === 'custom';
+      var hint = document.getElementById('drag-hint');
       if (hint) hint.classList.toggle('visible', isDrag);
 
-      attachCardListeners(grid, items);
-      if (isDrag) attachDragListeners(grid);
+      if (view === 'list') {
+        var container = document.getElementById('wl-list');
+        container.style.display = 'flex';
+        document.getElementById('wl-grid').style.display = 'none';
+        container.innerHTML = sorted.map(function(item,i){ return buildListRow(item,i+1); }).join('');
+        container.classList.toggle('drag-mode', isDrag);
+        container.querySelectorAll('.list-row').forEach(function(el) {
+          el.addEventListener('click', function(){ if(el.classList.contains('dragging'))return; var item=cards.find(function(c){return c.id===el.dataset.id;}); if(item)openModal(item); });
+        });
+        if (isDrag) addDragList(container);
+      } else {
+        var grid = document.getElementById('wl-grid');
+        grid.style.display = 'grid';
+        document.getElementById('wl-list').style.display = 'none';
+        grid.innerHTML = sorted.map(buildCard).join('');
+        grid.classList.toggle('drag-mode', isDrag);
+        grid.querySelectorAll('.wl-card').forEach(function(el) {
+          el.addEventListener('click', function(){ if(el.classList.contains('dragging'))return; var item=cards.find(function(c){return c.id===el.dataset.id;}); if(item)openModal(item); });
+        });
+        if (isDrag) addDragGrid(grid);
+      }
     }
 
-    main.innerHTML = `
-      <div class="section-header">
-        <h2>Watchlist</h2>
-        <span class="section-count">${wl.length} items</span>
-        <span class="drag-hint" id="drag-hint">✦ arrastra las cartas para reordenar</span>
-        <div class="filter-group">
-          <button class="filter-btn" data-sort="gainers">% Gainers</button>
-          <button class="filter-btn active" data-sort="value">Price ↑</button>
-          <button class="filter-btn" data-sort="custom">Custom ⠿</button>
-        </div>
-      </div>
-      <div class="card-grid" id="wl-grid"></div>`;
+    main.innerHTML =
+      '<div class="section-header">'
+      + '<h2>Watchlist</h2>'
+      + '<span class="section-count">' + wl.length + ' items</span>'
+      + '<span class="drag-hint" id="drag-hint">✦ arrastra para reordenar</span>'
+      + '<div class="filter-group">'
+      + '<button class="filter-btn" data-sort="gainers">% Gainers</button>'
+      + '<button class="filter-btn active" data-sort="value">Price ↑</button>'
+      + '<button class="filter-btn" data-sort="custom">Custom ⠿</button>'
+      + '</div>'
+      + '<div class="view-toggle">'
+      + '<button class="view-btn active" data-view="grid" title="Vista tarjetas">⊞</button>'
+      + '<button class="view-btn" data-view="list" title="Vista lista">≡</button>'
+      + '</div>'
+      + '</div>'
+      + '<div class="card-grid" id="wl-grid"></div>'
+      + '<div class="list-view" id="wl-list" style="display:none"></div>';
 
-    renderWLGrid(wl, currentSort);
+    renderWLGrid(wl, currentSort, currentView);
 
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.filter-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.filter-btn').forEach(function(b){ b.classList.remove('active'); });
         btn.classList.add('active');
         currentSort = btn.dataset.sort;
-        renderWLGrid(wl, currentSort);
+        renderWLGrid(wl, currentSort, currentView);
+      });
+    });
+
+    document.querySelectorAll('.view-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.view-btn').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        currentView = btn.dataset.view;
+        renderWLGrid(wl, currentSort, currentView);
       });
     });
   }
