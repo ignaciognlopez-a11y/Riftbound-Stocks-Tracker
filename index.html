@@ -42,6 +42,33 @@
     .sm-sub { font-size:11px; color:var(--text-muted); }
     .sm-sub.pos { color:var(--green); } .sm-sub.neg { color:var(--red); }
 
+    /* P&L metric clickable */
+    .summary-metric.clickable { cursor:pointer; transition:border-color 0.15s, background 0.15s; }
+    .summary-metric.clickable:hover { border-color:var(--gold-dim); background:var(--surface2); }
+
+    /* P&L BREAKDOWN MODAL */
+    .pnl-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); z-index:200; align-items:center; justify-content:center; }
+    .pnl-overlay.open { display:flex; animation:overlay-in 0.18s ease both; }
+    @keyframes overlay-in { from{opacity:0} to{opacity:1} }
+    .pnl-modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:460px; max-width:95vw; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 24px 64px rgba(0,0,0,0.6); animation:pnl-in 0.25s cubic-bezier(0.34,1.4,0.64,1) both; }
+    @keyframes pnl-in { from{opacity:0;transform:scale(0.9) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
+    .pnl-header { padding:16px 20px 12px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); flex-shrink:0; }
+    .pnl-title { font-size:15px; font-weight:800; letter-spacing:-0.3px; }
+    .pnl-totals { display:flex; gap:16px; align-items:baseline; }
+    .pnl-total-val { font-size:22px; font-weight:800; letter-spacing:-0.5px; }
+    .pnl-total-pct { font-size:12px; font-weight:700; }
+    .pnl-close { width:26px; height:26px; border-radius:50%; background:var(--surface2); border:1px solid var(--border); cursor:pointer; color:var(--text-muted); font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .pnl-list { overflow-y:auto; padding:8px 0; }
+    .pnl-row { display:flex; align-items:center; gap:10px; padding:8px 20px; transition:background 0.1s; }
+    .pnl-row:hover { background:var(--surface2); }
+    .pnl-rank { font-size:10px; color:var(--text-muted); width:16px; text-align:right; flex-shrink:0; }
+    .pnl-img { width:32px; height:32px; border-radius:4px; object-fit:cover; object-position:top; flex-shrink:0; }
+    .pnl-name { font-size:12px; font-weight:600; color:var(--text); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pnl-pct { font-size:12px; font-weight:800; flex-shrink:0; min-width:56px; text-align:right; }
+    .pnl-eur { font-size:12px; font-weight:600; color:var(--text); flex-shrink:0; min-width:70px; text-align:right; }
+    .pnl-pct.pos { color:var(--green); } .pnl-pct.neg { color:var(--red); }
+    .pnl-divider { height:1px; background:var(--border); margin:4px 20px; }
+
     /* WATCHLIST STRIP */
     .wl-strip { margin-bottom:28px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 16px; }
     .wl-strip-label { font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); font-weight:600; margin-bottom:10px; }
@@ -161,8 +188,8 @@
       <span class="sm-value" id="s-market">—</span>
       <span class="sm-sub">paid positions</span>
     </div>
-    <div class="summary-metric">
-      <span class="sm-label">P&amp;L</span>
+    <div class="summary-metric clickable" id="pnl-metric" title="Ver desglose P&L">
+      <span class="sm-label">P&amp;L ↗</span>
       <span class="sm-value" id="s-pnl">—</span>
       <span class="sm-sub" id="s-pct">—</span>
     </div>
@@ -204,6 +231,22 @@
     <div class="card-grid" id="sealed-grid"></div>
   </div>
 </main>
+
+<div class="pnl-overlay" id="pnl-overlay">
+  <div class="pnl-modal">
+    <div class="pnl-header">
+      <div>
+        <div class="pnl-title">P&amp;L Breakdown</div>
+        <div class="pnl-totals">
+          <span class="pnl-total-val" id="pnl-total-val">—</span>
+          <span class="pnl-total-pct" id="pnl-total-pct"></span>
+        </div>
+      </div>
+      <button class="pnl-close" id="pnl-close">✕</button>
+    </div>
+    <div class="pnl-list" id="pnl-list"></div>
+  </div>
+</div>
 
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal">
@@ -461,7 +504,62 @@
       });
     });
 
-    initWatchlist(allCards);
+    // ── P&L BREAKDOWN MODAL ──
+    document.getElementById('pnl-metric').addEventListener('click', () => {
+      const paid = holding.filter(c => c.buyPrice > 0);
+      const rows = paid.map(c => {
+        const qty = c.qty || 1;
+        const pnlEur = (c.currentPrice - c.buyPrice) * qty;
+        const pnlPct = (c.currentPrice - c.buyPrice) / c.buyPrice * 100;
+        return { ...c, pnlEur, pnlPct };
+      }).sort((a, b) => b.pnlPct - a.pnlPct);
+
+      const totalPnl = rows.reduce((s, c) => s + c.pnlEur, 0);
+      const totalInv = paid.reduce((s, c) => s + c.buyPrice * (c.qty||1), 0);
+      const totalPct = totalInv > 0 ? totalPnl / totalInv * 100 : 0;
+
+      const pnlEl = document.getElementById('pnl-total-val');
+      const pctEl = document.getElementById('pnl-total-pct');
+      pnlEl.textContent = fmtSign(totalPnl);
+      pnlEl.style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+      pctEl.textContent = fmtPct(totalPct) + ' on cost';
+      pctEl.style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+
+      // Separar gainers y losers
+      const gainers = rows.filter(r => r.pnlEur >= 0);
+      const losers  = rows.filter(r => r.pnlEur < 0);
+
+      function rowHTML(r, i) {
+        const pos = r.pnlEur >= 0;
+        const sign = pos ? '+' : '';
+        return `<div class="pnl-row">
+          <span class="pnl-rank">${i + 1}</span>
+          <img class="pnl-img" src="${r.image}" alt="${r.name}" onerror="this.style.opacity=0.1"/>
+          <span class="pnl-name">${r.name}</span>
+          <span class="pnl-pct ${pos ? 'pos' : 'neg'}">${sign}${r.pnlPct.toFixed(1)}%</span>
+          <span class="pnl-eur">${sign}${fmt(Math.abs(r.pnlEur))}</span>
+        </div>`;
+      }
+
+      let html = gainers.map((r, i) => rowHTML(r, i)).join('');
+      if (gainers.length && losers.length) html += '<div class="pnl-divider"></div>';
+      html += losers.map((r, i) => rowHTML(r, i)).join('');
+
+      document.getElementById('pnl-list').innerHTML = html;
+      document.getElementById('pnl-overlay').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    });
+
+    document.getElementById('pnl-close').addEventListener('click', () => {
+      document.getElementById('pnl-overlay').classList.remove('open');
+      document.body.style.overflow = '';
+    });
+    document.getElementById('pnl-overlay').addEventListener('click', e => {
+      if (e.target.id === 'pnl-overlay') {
+        document.getElementById('pnl-overlay').classList.remove('open');
+        document.body.style.overflow = '';
+      }
+    });
   }
 
   render();
