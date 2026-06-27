@@ -402,7 +402,7 @@
       const price=item.currentPrice?item.currentPrice.toLocaleString('de-DE',{minimumFractionDigits:0})+' €':'—';
       const url=item.cardmarketUrl||'https://www.cardmarket.com/en/Riftbound/Products/Search?searchString='+encodeURIComponent(item.name);
       return `<a class="wl-img-slide" href="${url}" target="_blank" rel="noopener" draggable="false" title="${item.name}">
-        <img src="${item.image}" alt="${item.name}" draggable="false" onerror="this.style.opacity='0.15'"/>
+        <img src="${item.image}" alt="${item.name}" draggable="false" onerror="this.style.opacity=0.15"/>
         <div class="wl-slide-price">${price}</div>
         <div class="wl-slide-pct ${cls}"><span>${arrow}</span>${pctTxt}</div>
         <div class="wl-slide-name">${item.name}</div>
